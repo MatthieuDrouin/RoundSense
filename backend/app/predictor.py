@@ -34,6 +34,11 @@ class RoundPredictor:
     def _sigmoid(x: float) -> float:
         return 1.0 / (1.0 + math.exp(-max(-20.0, min(20.0, x))))
 
+    @staticmethod
+    def _logit(p: float) -> float:
+        p = max(0.001, min(0.999, p))
+        return math.log(p / (1.0 - p))
+
     def heuristic(self, f: FeatureVector) -> float:
         alive = (f.ct_alive - f.t_alive) * 0.85
         health = (f.ct_health - f.t_health) / 260.0
@@ -50,7 +55,7 @@ class RoundPredictor:
         p = self._sigmoid(z)
         return max(0.01, min(0.99, p))
 
-    def predict(self, f: FeatureVector) -> tuple[float, str]:
+    def _base_prediction(self, f: FeatureVector) -> tuple[float, str]:
         if self.model is None:
             return self.heuristic(f), "heuristic"
         try:
@@ -63,3 +68,15 @@ class RoundPredictor:
             return max(0.01, min(0.99, p)), "trained_model"
         except Exception:
             return self.heuristic(f), "heuristic_fallback"
+
+    def predict(self, f: FeatureVector, positioning_adjustment: float = 0.0) -> tuple[float, str]:
+        p, source = self._base_prediction(f)
+
+        # Positioning is blended in log-odds space so it can move an ML
+        # probability without replacing the trained model. A negative tactical
+        # adjustment favors T; a positive adjustment favors CT.
+        if abs(positioning_adjustment) >= 0.01:
+            p = self._sigmoid(self._logit(p) + positioning_adjustment)
+            source = f"{source}+positioning"
+
+        return max(0.01, min(0.99, p)), source
