@@ -97,35 +97,45 @@ class FeatureEngine:
         raw = 0.38 * kd + 0.16 * (kills / 10.0) + 0.12 * (assists / 8.0) + 0.12 * (mvps / 4.0) + 0.22 * (score / 30.0)
         return round(max(0.0, min(raw, 2.5)), 2)
 
+    def _snapshot(self, steam_id: str, p: dict[str, Any]) -> PlayerSnapshot:
+        state = p.get("state") or {}
+        stats = p.get("match_stats") or {}
+        weapons = self._weapon_list(p)
+        x, y, z = self._parse_position(p.get("position"))
+        team = self._team_name(p)
+        health = int(state.get("health", 0) or 0)
+        return PlayerSnapshot(
+            steam_id=str(steam_id),
+            name=str(p.get("name", "Unknown")),
+            team=team,
+            alive=health > 0,
+            health=health,
+            armor=int(state.get("armor", 0) or 0),
+            money=int(state.get("money", 0) or 0),
+            equipment_value=self._equipment_value(weapons),
+            kills=int(stats.get("kills", 0) or 0),
+            assists=int(stats.get("assists", 0) or 0),
+            deaths=int(stats.get("deaths", 0) or 0),
+            mvps=int(stats.get("mvps", 0) or 0),
+            score=int(stats.get("score", 0) or 0),
+            weapons=weapons,
+            x=x, y=y, z=z,
+            impact=self._impact(p),
+        )
+
     def parse_players(self, payload: dict[str, Any]) -> list[PlayerSnapshot]:
         allplayers = payload.get("allplayers") or {}
-        result: list[PlayerSnapshot] = []
-        for steam_id, p in allplayers.items():
-            state = p.get("state") or {}
-            stats = p.get("match_stats") or {}
-            weapons = self._weapon_list(p)
-            x, y, z = self._parse_position(p.get("position"))
-            team = self._team_name(p)
-            health = int(state.get("health", 0) or 0)
-            result.append(PlayerSnapshot(
-                steam_id=str(steam_id),
-                name=str(p.get("name", "Unknown")),
-                team=team,
-                alive=health > 0,
-                health=health,
-                armor=int(state.get("armor", 0) or 0),
-                money=int(state.get("money", 0) or 0),
-                equipment_value=self._equipment_value(weapons),
-                kills=int(stats.get("kills", 0) or 0),
-                assists=int(stats.get("assists", 0) or 0),
-                deaths=int(stats.get("deaths", 0) or 0),
-                mvps=int(stats.get("mvps", 0) or 0),
-                score=int(stats.get("score", 0) or 0),
-                weapons=weapons,
-                x=x, y=y, z=z,
-                impact=self._impact(p),
-            ))
-        return result
+        if allplayers:
+            return [self._snapshot(str(steam_id), p) for steam_id, p in allplayers.items()]
+
+        # Normal player GSI often does not expose allplayers. Fall back to the
+        # local/observed player so the dashboard still shows useful live data.
+        p = payload.get("player") or {}
+        if not p:
+            return []
+        provider = payload.get("provider") or {}
+        steam_id = str(p.get("steamid") or provider.get("steamid") or "local-player")
+        return [self._snapshot(steam_id, p)]
 
     @staticmethod
     def summarize_team(players: list[PlayerSnapshot], team: str) -> TeamSnapshot:
