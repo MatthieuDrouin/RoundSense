@@ -15,6 +15,9 @@ RoundSense ingests live CS2 Game State Integration (GSI) telemetry, computes tea
 - Economy, health, armor, utility and alive-player tracking
 - Recent-round momentum using a bounded deque
 - Hash-map based player lookup from GSI payloads
+- Live tactical minimap with CT/T player and bomb positions
+- Map-aware A/B site pressure, defender coverage, team spread and nearest-enemy analytics
+- Hybrid positioning adjustment blended with the trained model in log-odds space
 - Spatial player coordinates and nearest-enemy helper
 - SQLite state history by default
 - React/Vite live dashboard
@@ -39,6 +42,7 @@ CS2 Game State Integration
  Round Predictor
   | heuristic (default)
   | trained ML model
+  | tactical positioning adjustment
           |
           v
  WebSocket broadcaster
@@ -168,6 +172,22 @@ The live feature vector currently contains:
 
 The exact historical training feature definition should be kept consistent with the live feature extractor.
 
+### Tactical positioning layer
+
+When full-team position data is available (normally observer/spectator GSI), RoundSense also calculates:
+
+- CT and T team spread
+- Distance between team centroids
+- Average nearest-enemy distance
+- Inferred A/B attack focus
+- Number of T players pressuring the focused site
+- Number of CT players covering that site
+- Bomb location when GSI exposes it
+
+The existing XGBoost model is intentionally kept compatible with the original training feature set. RoundSense converts the tactical state into a bounded **log-odds adjustment** and blends it with the model's probability. For example, if several T players are grouped around A while no CT is close enough to cover A, the positioning layer lowers CT's estimated win probability. Early-round positioning is down-weighted because site locations are less informative before an execute develops.
+
+This is a hybrid system rather than a claim that the current XGBoost model itself learned map positioning. A future model version can train directly on the spatial features once a sufficiently large historical dataset is built.
+
 ## 5. Train the ML pipeline
 
 ### Pipeline test with synthetic data
@@ -214,14 +234,14 @@ This project deliberately exposes more than a model call:
 2. Add time-aware train/validation/test splits by match to prevent leakage.
 3. Add calibration curves and Brier score in addition to ROC-AUC/F1.
 4. Train map-specific models or include map encoding.
-5. Implement a KD-tree/grid spatial index for map-control features.
-6. Add grenade inventory and utility-value estimation.
-7. Add clutch-state features (1vX, retake, post-plant).
-8. Add feature importance / SHAP analysis.
-9. Replace SQLite with PostgreSQL for deployed use.
-10. Add Redis if scaling WebSocket/state workloads.
-11. Add authentication before exposing an internet-facing dashboard.
-12. Add CI with unit tests and frontend build checks.
+5. Train a second-generation model directly on team spread, site pressure, nearest-enemy and map-control features.
+6. Implement a KD-tree/grid spatial index for larger spatial workloads.
+7. Add grenade inventory and utility-value estimation.
+8. Add clutch-state features (1vX, retake, post-plant).
+9. Add feature importance / SHAP analysis.
+10. Replace SQLite with PostgreSQL for deployed use.
+11. Add Redis if scaling WebSocket/state workloads.
+12. Add authentication before exposing an internet-facing dashboard.
 
 ## Resume-ready wording (after you have real results)
 
@@ -273,3 +293,8 @@ roundsense/
 ## License
 
 MIT
+
+
+## Radar data attribution
+
+The dashboard uses Counter-Strike overview metadata and radar images exposed by the open-source [MurkyYT/cs2-map-icons](https://github.com/MurkyYT/cs2-map-icons) project, which extracts current radar assets and overview data from the game depot. RoundSense stores only lightweight transform/site metadata in source and loads radar images from that repository at runtime.
