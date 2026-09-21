@@ -75,6 +75,9 @@ class LiveState(BaseModel):
     map_name: str = "unknown"
     round_number: int = 0
     round_phase: str = "unknown"
+    timer_phase: str = "unknown"
+    winner: str | None = None
+    full_team_data: bool = False
     bomb_state: str = "unknown"
     bomb_x: float | None = None
     bomb_y: float | None = None
