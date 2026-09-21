@@ -1,0 +1,46 @@
+import React, {useEffect, useMemo, useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {LineChart, Line, ResponsiveContainer, YAxis, Tooltip} from 'recharts';
+import './styles.css';
+
+const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const WS = API.replace(/^http/, 'ws') + '/ws';
+
+function pct(v){ return `${Math.round((v ?? .5)*100)}%`; }
+function money(v){ return `$${Number(v||0).toLocaleString()}`; }
+
+function App(){
+  const [state,setState]=useState(null);
+  const [history,setHistory]=useState([]);
+  const [status,setStatus]=useState('connecting');
+
+  useEffect(()=>{
+    fetch(`${API}/api/state`).then(r=>r.ok?r.json():null).then(x=>x&&setState(x)).catch(()=>{});
+    const ws = new WebSocket(WS);
+    ws.onopen=()=>setStatus('live');
+    ws.onclose=()=>setStatus('offline');
+    ws.onerror=()=>setStatus('offline');
+    ws.onmessage=(e)=>{
+      const s=JSON.parse(e.data);
+      setState(s);
+      setHistory(h=>[...h,{n:s.round_number,p:Math.round(s.ct_win_probability*100)}].slice(-60));
+    };
+    return ()=>ws.close();
+  },[]);
+
+  const topPlayers=useMemo(()=>state?.players?.slice(0,5)||[],[state]);
+  if(!state) return <div className="empty"><h1>RoundSense</h1><p>Waiting for CS2 telemetry…</p><p>Run <code>python scripts/simulate_gsi.py</code> for demo data.</p><span className={`dot ${status}`}></span> {status}</div>;
+
+  return <main>
+    <header><div><h1>RoundSense</h1><p>{state.map_name} · Round {state.round_number} · {state.round_phase}</p></div><div className="live"><span className={`dot ${status}`}></span>{status.toUpperCase()}</div></header>
+    <section className="score"><div><b>CT</b><strong>{state.ct_score}</strong></div><div className="prob"><small>ROUND WIN PROBABILITY</small><div className="bar"><i style={{width:pct(state.ct_win_probability)}}></i></div><span>{pct(state.ct_win_probability)} CT</span><span>{pct(state.t_win_probability)} T</span></div><div><b>T</b><strong>{state.t_score}</strong></div></section>
+    <section className="grid">
+      <article><h2>Live State</h2><div className="stats"><Stat k="Alive" a={state.ct.alive} b={state.t.alive}/><Stat k="Health" a={state.ct.health} b={state.t.health}/><Stat k="Armor" a={state.ct.armor} b={state.t.armor}/><Stat k="Equipment" a={money(state.ct.equipment_value)} b={money(state.t.equipment_value)}/><Stat k="Utility" a={state.ct.utility} b={state.t.utility}/></div><p className="bomb">Bomb: <b>{state.bomb_state}</b> · Time: <b>{state.round_time_remaining.toFixed(1)}s</b></p></article>
+      <article><h2>Probability Trend</h2><div className="chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><YAxis domain={[0,100]} hide/><Tooltip/><Line type="monotone" dataKey="p" stroke="currentColor" strokeWidth={2} dot={false}/></LineChart></ResponsiveContainer></div><small>Prediction source: {state.prediction_source}</small></article>
+      <article className="players"><h2>Top Players</h2>{topPlayers.map((p,i)=><div className="player" key={p.steam_id}><span>#{i+1} {p.name}<em>{p.team}</em></span><span>{p.kills}/{p.deaths} · {p.impact.toFixed(2)}</span></div>)}</article>
+      <article><h2>Model Features</h2><div className="featureList">{Object.entries(state.features).slice(0,12).map(([k,v])=><span key={k}><small>{k.replaceAll('_',' ')}</small><b>{typeof v==='number'?Number(v).toFixed(Number.isInteger(v)?0:2):v}</b></span>)}</div></article>
+    </section>
+  </main>
+}
+function Stat({k,a,b}){ return <div><span>{a}</span><small>{k}</small><span>{b}</span></div> }
+createRoot(document.getElementById('root')).render(<App/>);
