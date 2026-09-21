@@ -54,12 +54,31 @@ class FeatureVector(BaseModel):
     recent_ct_win_rate: float = 0.5
 
 
+class TacticalSnapshot(BaseModel):
+    players_with_position: int = 0
+    ct_spread: float | None = None
+    t_spread: float | None = None
+    centroid_distance: float | None = None
+    ct_avg_nearest_enemy: float | None = None
+    t_avg_nearest_enemy: float | None = None
+    target_site: str | None = None
+    ct_site_coverage: int = 0
+    t_site_pressure: int = 0
+    ct_avg_distance_to_target: float | None = None
+    t_avg_distance_to_target: float | None = None
+    positioning_adjustment: float = 0.0
+    note: str = "Not enough full-team position data yet."
+
+
 class LiveState(BaseModel):
     timestamp: float
     map_name: str = "unknown"
     round_number: int = 0
     round_phase: str = "unknown"
     bomb_state: str = "unknown"
+    bomb_x: float | None = None
+    bomb_y: float | None = None
+    bomb_z: float | None = None
     round_time_remaining: float = 0.0
     ct_score: int = 0
     t_score: int = 0
@@ -67,6 +86,7 @@ class LiveState(BaseModel):
     t: TeamSnapshot = Field(default_factory=TeamSnapshot)
     players: list[PlayerSnapshot] = Field(default_factory=list)
     features: FeatureVector = Field(default_factory=FeatureVector)
+    tactical: TacticalSnapshot = Field(default_factory=TacticalSnapshot)
     ct_win_probability: float = 0.5
     t_win_probability: float = 0.5
     prediction_source: str = "heuristic"
