@@ -1,6 +1,7 @@
 from backend.app.feature_engine import FeatureEngine
 from backend.app.predictor import RoundPredictor
 from backend.app.map_data import world_to_radar
+from backend.app.gsi import GSIProcessor
 
 
 def sample_payload():
@@ -96,3 +97,40 @@ def test_positioning_adjustment_changes_probability(tmp_path):
     neutral,_ = predictor.predict(f, 0)
     t_edge,_ = predictor.predict(f, -0.8)
     assert t_edge < neutral
+
+
+def test_all_t_dead_preplant_is_100_percent_ct(tmp_path):
+    payload = sample_payload()
+    payload["allplayers"]["2"]["state"]["health"] = 0
+    payload["bomb"]["state"] = "carried"
+    payload["phase_countdowns"] = {"phase": "live", "phase_ends_in": "40"}
+    processor = GSIProcessor(RoundPredictor(str(tmp_path / "missing.joblib")))
+    state = processor.process(payload)
+    assert state.full_team_data is True
+    assert state.t.alive == 0
+    assert state.ct_win_probability == 1.0
+    assert state.t_win_probability == 0.0
+    assert state.prediction_source == "terminal_elimination"
+
+
+def test_round_result_overrides_model(tmp_path):
+    payload = sample_payload()
+    payload["round"] = {"phase": "over", "win_team": "T"}
+    payload["phase_countdowns"] = {"phase": "over", "phase_ends_in": "0"}
+    processor = GSIProcessor(RoundPredictor(str(tmp_path / "missing.joblib")))
+    state = processor.process(payload)
+    assert state.ct_win_probability == 0.0
+    assert state.t_win_probability == 1.0
+    assert state.prediction_source == "round_result"
+
+
+def test_planted_bomb_with_dead_t_uses_bomb_clock(tmp_path):
+    payload = sample_payload()
+    payload["allplayers"]["2"]["state"]["health"] = 0
+    payload["bomb"]["state"] = "planted"
+    payload["phase_countdowns"] = {"phase": "bomb", "phase_ends_in": "18"}
+    processor = GSIProcessor(RoundPredictor(str(tmp_path / "missing.joblib")))
+    state = processor.process(payload)
+    assert state.t.alive == 0
+    assert state.ct_win_probability >= 0.94
+    assert state.prediction_source == "bomb_clock_override"
