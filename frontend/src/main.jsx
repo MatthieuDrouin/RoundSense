@@ -9,7 +9,6 @@ const WS = API.replace(/^http/, 'ws') + '/ws';
 
 function pct(v){ return `${Math.round((v ?? .5)*100)}%`; }
 function money(v){ return `$${Number(v||0).toLocaleString()}`; }
-function signed(v){ const n=Number(v||0); return `${n>=0?'+':''}${n.toFixed(2)}`; }
 function formatClock(seconds){
   const total=Math.max(0,Math.ceil(Number(seconds)||0));
   const mins=Math.floor(total/60);
@@ -69,12 +68,10 @@ function TacticalMap({state}){
 
 function TacticalIntel({tactical}){
   if(!tactical) return null;
-  const adj=tactical.positioning_adjustment||0;
   return <>
     <div className="intelRow"><span>Attack focus</span><b>{tactical.target_site||'—'}</b></div>
-    <div className="intelRow"><span>T pressure near site</span><b>{tactical.t_site_pressure}</b></div>
-    <div className="intelRow"><span>CT coverage near site</span><b>{tactical.ct_site_coverage}</b></div>
-    <div className="intelRow"><span>Positioning adjustment</span><b className={adj<0?'tAdv':adj>0?'ctAdv':''}>{signed(adj)} log-odds</b></div>
+    <div className="intelRow"><span>T near site</span><b>{tactical.t_site_pressure}</b></div>
+    <div className="intelRow"><span>CT near site</span><b>{tactical.ct_site_coverage}</b></div>
     <p className="intelNote">{tactical.note}</p>
   </>;
 }
@@ -125,11 +122,11 @@ function App(){
 
     <section className="mapGrid">
       <article className="mapCard">
-        <div className="cardTitle"><h2>Live Tactical Map</h2><small>Alive players, bomb location, and site pressure update live.</small></div>
+        <div className="cardTitle"><h2>Live Map</h2><small>Players and bomb position</small></div>
         <TacticalMap state={state}/>
       </article>
       <article>
-        <h2>Positioning Intelligence</h2>
+        <h2>Map Control</h2>
         <TacticalIntel tactical={state.tactical}/>
         <div className="spatialStats">
           <span><small>CT spread</small><b>{state.tactical?.ct_spread??'—'}</b></span>
@@ -153,7 +150,7 @@ function App(){
         <p className="bomb">Bomb: <b>{state.bomb_state}</b> · Timer: <b>{formatClock(state.round_time_remaining)}</b></p>
       </article>
       <article>
-        <h2>Probability Trend</h2>
+        <h2>Win Probability History</h2>
         <div className="chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={history}><YAxis domain={[0,100]} hide/><Tooltip/><Line type="monotone" dataKey="p" stroke="currentColor" strokeWidth={2} dot={false}/></LineChart></ResponsiveContainer></div>
         <small>Prediction source: {state.prediction_source}</small>
       </article>
@@ -162,7 +159,7 @@ function App(){
         {topPlayers.map((p,i)=><div className="player" key={p.steam_id}><span>#{i+1} {p.name}<em>{p.team}</em></span><span>{p.kills}/{p.deaths} · {Number(p.impact||0).toFixed(2)}</span></div>)}
       </article>
       <article>
-        <h2>Model Features</h2>
+        <h2>Match Data</h2>
         <div className="featureList">{Object.entries(state.features).slice(0,12).map(([k,v])=><span key={k}><small>{k.replaceAll('_',' ')}</small><b>{typeof v==='number'?Number(v).toFixed(Number.isInteger(v)?0:2):v}</b></span>)}</div>
       </article>
     </section>
